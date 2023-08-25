@@ -44,6 +44,8 @@ human_sec_trim <- readRDS("data/rds/normExp_HumanSecondTrim.rds")
 
 ```{r}
 mycor <- function(species='human',branch='AB',includeZeros=TRUE){
+  species <- str_to_lower(species)
+  branch <- str_to_upper(branch)
   if(species=='human'){
     df <- human_sec_trim
   } else if (species=='mice'){
