@@ -55,22 +55,27 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   if(branch!='AB'){
     b <- paste0('Branch ', branch)
     df <- df[df$Branch==b, ]
-    asub <- unique(df$branch)
-    sub <- c(factor('All'),asub)
-    sub <- paste0(1:length(sub),': ',sub,'\n')
-    cat(green("Note: there are sub branches = \n"),
-        green(bold(sub)))
-    sb <- readline(prompt = "Please enter number of sub branch = ")
-    if(sb!=1){
-      sb<-asub[as.numeric(sb)]
-      df <- df[df$branch==sb, -c(13,14)]
-    } else if(sb==1){
+    if(species=='human'){
+      asub <- unique(df$branch)
+      sub <- c(factor('All'),asub)
+      sub <- paste0(1:length(sub),': ',sub,'\n')
+      cat(green("Note: there are sub branches = \n"),
+          green(bold(sub)))
+      sb <- readline(prompt = "Please enter number of sub branch = ")
+      if(sb!=1){
+        sb<-asub[as.numeric(sb)]
+        df <- df[df$branch==sb, -c(13,14)]
+      } else if(sb==1){
+        sb <- b
+        df <- df[, -c(13,14)]
+        }
+    } else if(species=='mice'){
       sb <- b
       df <- df[, -c(13,14)]
-    }
-  } else if(branch=='AB'){
-    df <- df[, -c(13,14)]
-  }
+      }
+    } else if(branch=='AB'){
+      df <- df[, -c(13,14)]
+      }
   ######################  initializing
   num_genes <- ncol(df)
   gene_names <- colnames(df)
