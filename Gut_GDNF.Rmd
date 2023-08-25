@@ -28,6 +28,7 @@ library(dplyr)
 library(reshape2)
 library(ggpubr)
 library(tidyverse)
+#library(crayon)
 ```
 
 ## Read data
@@ -53,7 +54,20 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   }
   if(branch!='AB'){
     b <- paste0('Branch ', branch)
-    df <- df[df$Branch==b, -c(13,14)]
+    df <- df[df$Branch==b, ]
+    asub <- unique(df$branch)
+    sub <- c(factor('All'),asub)
+    sub <- paste0(1:length(sub),': ',sub,'\n')
+    cat(green("Note: there are sub branches = \n"),
+        green(bold(sub)))
+    sb <- readline(prompt = "Please enter number of sub branch = ")
+    if(sb!=1){
+      sb<-asub[as.numeric(sb)]
+      df <- df[df$branch==sb, -c(13,14)]
+    } else if(sb==1){
+      sb <- b
+      df <- df[, -c(13,14)]
+    }
   } else if(branch=='AB'){
     df <- df[, -c(13,14)]
   }
@@ -64,7 +78,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   cor_matrix <- p_value_matrix
   ###############################
   mainDir <- getwd()
-  subDir <- paste0(species,'_branch_',branch)
+  subDir <- paste0(species,'_',sb)
   pTOs <- file.path(mainDir, subDir)
   if (!file.exists(pTOs)){
     dir.create(pTOs)
@@ -82,7 +96,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
         y <- y[non_zero_indices]
       }
       dfxy = data.frame(x=x, y=y)
-      if (i>j){
+      if (i>j & length(x)>2){
         gp <- ggplot(dfxy, aes(x = x, y = y)) +
           geom_point() +
           ggtitle(paste(subDir,", Number of cells = ",length(x))) +
