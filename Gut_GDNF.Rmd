@@ -61,7 +61,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
       sub <- paste0(1:length(sub),': ',sub,'\n')
       cat(green("Note: there are sub branches = \n"),
           green(bold(sub)))
-      sb <- readline(prompt = "Please enter number of sub branch = ")
+      sb <- readline(prompt = "Please enter sub branch number = ")
       if(sb!=1){
         sb<-asub[as.numeric(sb)]
         df <- df[df$branch==sb, -c(13,14)]
