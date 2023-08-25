@@ -70,6 +70,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
         df <- df[, -c(13,14)]
         }
     } else if(species=='mice'){
+      cat(green("Note: there are not information for sub branch in mice"),'\n')
       sb <- b
       df <- df[, -c(13,14)]
       }
@@ -122,8 +123,10 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
       }
     }
     }
-  rownames(p_value_matrix) = colnames(p_value_matrix) = colnames(df)
-  rownames(cor_matrix) = colnames(cor_matrix) = colnames(df)
+  rownames(p_value_matrix) <- colnames(p_value_matrix) <- colnames(df)
+  rownames(cor_matrix) <- colnames(cor_matrix) <- colnames(df)
+  write.csv(p_value_matrix,file = paste0(pTOs, '/','p_value.csv'))
+  write.csv(cor_matrix,file = paste0(pTOs, '/','cor_value.csv'))
   cor_obj <- list(pval=p_value_matrix, cor=cor_matrix)
   ################################
   ############# heatmap
