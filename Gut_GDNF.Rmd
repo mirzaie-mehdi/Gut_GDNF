@@ -48,12 +48,13 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   species <- str_to_lower(species)
   branch <- str_to_upper(branch)
   if(species=='human'){
-    df <- human_sec_trim
+    #df <- human_sec_trim
+    df <- exClu
   } else if (species=='mice'){
     df <- mice_e15
   }
+  b <- paste0('Branch ', branch)
   if(branch!='AB'){
-    b <- paste0('Branch ', branch)
     df <- df[df$Branch==b, ]
     if(species=='human'){
       asub <- unique(df$branch)
@@ -75,6 +76,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
       df <- df[, -c(13,14)]
       }
     } else if(branch=='AB'){
+      sb <- b
       df <- df[, -c(13,14)]
       }
   ######################  initializing
