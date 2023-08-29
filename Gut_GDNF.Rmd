@@ -48,8 +48,8 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   species <- str_to_lower(species)
   branch <- str_to_upper(branch)
   if(species=='human'){
-    #df <- human_sec_trim
-    df <- exClu
+    df <- human_sec_trim
+    #df <- exClu
   } else if (species=='mice'){
     df <- mice_e15
   }
