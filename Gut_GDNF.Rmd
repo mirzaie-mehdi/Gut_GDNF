@@ -38,6 +38,173 @@ The data sets
 mice_e15 <- readRDS("data/rds/normExp_MiceE15.rds")
 human_sec_trim <- readRDS("data/rds/normExp_HumanSecondTrim.rds")
 #human_first_trim <- readRDS("data/rds/human_first.rds")
+#human_exClu <- readRDS('data/rds/HumanAB_150exClu.rds')
+#mice_exClu <- readRDS('data/rds/MiceAB_150exClu.rds')
+```
+
+## load UMAP data
+
+```{r}
+library(anndata)
+z <- read_h5ad("~/Desktop/proj/Heikki/data/norm_humanSecondTrime.h5ad")
+at <- z$obs
+ump<-z$obsm$X_umap
+rownames(ump)<-rownames(at)
+ump_human<-data.frame(ump[rownames(human_sec_trim[human_sec_trim$Branch%in%'Branch A',]),])
+################
+## mice
+at <- read.csv("~/Desktop/proj/Heikki/SCgutAtlas/mice/GSE149524/E15/loomE15.csv")
+at$CellID <- str_match(at$CellID, "(.*:)(.*)")[,3]
+rownames(at)<-at$CellID
+ump_mice<-at[rownames(mice_e15),3:4]
+######## clean environment
+sel_var <- c('sel_var',"human_sec_trim","mice_e15","mycor",'ump_human','ump_mice')
+rm(list=setdiff(ls(), sel_var))
+```
+
+## scCorr package
+
+```{r}
+library(scCorr)
+ump <- ump_human
+## cluster numbers
+clu.n  <- seq(10, 40, length.out = 4)
+################################
+out.s <- NULL
+old.name <- NULL
+for (c.n in clu.n){
+  cat("cluster number: ", c.n, "\n")
+  out           <- c_list(ump, c.n)
+  out.cellname  <- out[[2]]
+  tmp.out       <- NULL
+  n.out         <- NULL
+  for (i in 1:length(out.cellname)){
+    df <- data.frame(cell=out.cellname[[i]],
+                    clusterID=rep(i,length(out.cellname[[i]])))
+    tmp.out <- rbind(tmp.out, df)
+    n.out   <- c(n.out, out.cellname[[i]])
+  }
+  n.i     <- order(n.out)
+  n.out   <- n.out[n.i]
+  tmp.out <- tmp.out[n.i,]
+  if (class(old.name)=="character"){
+    print(sum(old.name==n.out))
+  }
+  old.name <- n.out
+  out.s <- cbind(out.s, tmp.out[,2])
+}
+
+row.names(out.s) <- old.name
+colnames(out.s)  <- paste0("clu", clu.n)
+
+################################
+cat("re-naming cluster ....\n")
+################################
+dat <- out.s
+out.s <- dat[,1]
+new.c <- dat[,1]
+for (j in 2:ncol(dat)){
+  ## previous cluster number
+  clu.m <- max(new.c)
+  old.c  <- NULL
+  ## order of the cluster ID by the previous cluster ID (1:clu.m)
+  for (k in 1:clu.m){
+    the.i <- which(new.c==k)
+    n.u   <- unique(dat[the.i,j])
+    old.c <- c(old.c, n.u)
+  }
+  ## re-sign the cluster ID by the order
+  new.c <- rep(NA, nrow(dat))
+  i <- 0
+  for (o.c in old.c){
+    i <- i + 1
+    o.i <- which(dat[,j]==o.c)
+    new.c[o.i] <- i
+  }
+  ## merge into the table
+  out.s <- cbind(out.s, new.c)
+}
+
+row.names(out.s) <- row.names(dat)
+colnames(out.s)  <- colnames(dat)
+write.table(out.s, "data/clastering/HumanA_40clustered.txt", quote=F, sep="\t")
+################################
+# summary table for the cluster results
+################################
+out.s <- read.delim('data/clastering/HumanA_40clustered.txt')
+dat   <- as.matrix(out.s)
+##########
+nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
+c2n   <- list()
+for (i in 1:nlc){
+  j <- which(dat[,ncol(dat)] == i)
+  c2n[[i]] <- row.names(dat)[j]
+}
+
+out.c <- NULL
+out.n <- NULL
+for (j in 1:ncol(dat)){
+  out1 <- NULL
+  out2 <- NULL
+  for (i in 1:nlc){
+    n   <- c2n[[i]]
+    k   <- which(row.names(dat) %in% n)
+    clu <- unique(dat[k, j])
+    out1 <- c(out1, clu)
+    out2 <- c(out2, length(k))
+  }
+  out.c <- cbind(out.c, out1)
+  out.n <- cbind(out.n, out2)
+}
+
+colnames(out.c)  <- colnames(dat)
+row.names(out.c) <- paste0("c", 1:nrow(out.c))
+colnames(out.n)  <- colnames(dat)
+row.names(out.n) <- paste0("c", 1:nrow(out.n))
+
+write.table(out.c, "data/clastering/HumanA_40cluID.txt", quote=F, sep="\t")
+write.table(out.n, "data/clastering/HumanA_40cluNum.txt", quote=F, sep="\t")
+################################
+rm(list=setdiff(ls(), sel_var))
+```
+
+## new expression based on average of cells within class
+
+```{r}
+out.s <- read.delim('data/clastering/HumanAB_150clustered.txt')
+out.s <- as.matrix(out.s)
+##################
+mydat <- as.data.frame(t(human_sec_trim[,-c(13,14)]))
+myclu.s <- data.frame(out.s)
+#######################
+#########
+dat.i <- which(colnames(mydat) %in% row.names(myclu.s))
+mydat.s <- mydat[,dat.i]
+clun <- ncol(myclu.s) # 15 means "clu150" , ....
+clu.u <- unique(myclu.s[,clun])
+
+exClu<-c()
+for (gi in 1:nrow(mydat)) {
+  print(gi)
+  v1.i<-gi
+  v1.c <- NULL
+  v2.c <- NULL
+  for (j in 1:length(clu.u)){
+    c.i  <- which(myclu.s[,clun]==clu.u[j])
+    c.n  <- row.names(myclu.s)[c.i]
+    d.i  <- which(colnames(mydat.s) %in% c.n)
+    tmp1 <- as.numeric(mydat.s[v1.i, d.i])
+    v1.c <- c(v1.c, mean(tmp1))
+    }
+  exClu<-rbind(exClu,v1.c)
+}
+colnames(exClu) <- paste0(colnames(out.s)[ncol(out.s)],'_class_',clu.u)
+rownames(exClu)<-rownames(mydat.s)
+exClu <- data.frame(t(exClu),branch='b',Branch='AB')
+saveRDS(exClu,'data/rds/HumanA_40exClu.rds')
+#######################
+rm(list=setdiff(ls(), sel_var))
+exClu<-readRDS('../data/rds/MiceAB_exClu.rds')
 ```
 
 ## function for pairwise correlation
@@ -49,10 +216,10 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   branch <- str_to_upper(branch)
   if(species=='human'){
     #df <- human_sec_trim
-    df <- exClu
+    df <- human_exClu
   } else if (species=='mice'){
     #df <- mice_e15
-    df <- exClu
+    df <- mice_exClu
   }
   b <- paste0('Branch ', branch)
   if(branch!='AB'){
@@ -128,9 +295,6 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
     }
   rownames(p_value_matrix) <- colnames(p_value_matrix) <- colnames(df)
   rownames(cor_matrix) <- colnames(cor_matrix) <- colnames(df)
-  write.csv(p_value_matrix,file = paste0(pTOs, '/','p_value.csv'))
-  write.csv(cor_matrix,file = paste0(pTOs, '/','cor_value.csv'))
-  cor_obj <- list(pval=p_value_matrix, cor=cor_matrix)
   ################################
   ############# heatmap
   p_value <- p_value_matrix
@@ -161,173 +325,8 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   # Save the plot
   file_name <- paste0(pTOs, '/',  subDir, ".pdf")
   ggsave(file_name, gh,width = 9,height = 7)
-  return(cor_obj)
+  write.csv(p_val_corr,file = paste0(pTOs, '/','cor_pvalue.csv'))
+  return(p_val_corr)
 }
-```
-
-## load UMAP data
-
-```{r}
-library(anndata)
-z <- read_h5ad("~/Desktop/proj/Heikki/data/norm_humanSecondTrime.h5ad")
-at <- z$obs
-ump<-z$obsm$X_umap
-rownames(ump)<-rownames(at)
-ump_human<-data.frame(ump[rownames(human_sec_trim),])
-################
-## mice
-at <- read.csv("~/Desktop/proj/Heikki/SCgutAtlas/mice/GSE149524/E15/loomE15.csv")
-at$CellID <- str_match(at$CellID, "(.*:)(.*)")[,3]
-rownames(at)<-at$CellID
-ump_mice<-at[rownames(mice_e15),3:4]
-######## clean environment
-sel_var <- c('sel_var',"human_sec_trim","mice_e15","mycor",'ump_human','ump_mice')
-rm(list=setdiff(ls(), sel_var))
-```
-
-## scCorr package
-
-```{r}
-library(scCorr)
-ump <- ump_mice
-## cluster numbers
-clu.n  <- seq(10, 150, length.out = 15)
-################################
-out.s <- NULL
-old.name <- NULL
-for (c.n in clu.n){
-  cat("cluster number: ", c.n, "\n")
-  out           <- c_list(ump, c.n)
-  out.cellname  <- out[[2]]
-  tmp.out       <- NULL
-  n.out         <- NULL
-  for (i in 1:length(out.cellname)){
-    df <- data.frame(cell=out.cellname[[i]],
-                    clusterID=rep(i,length(out.cellname[[i]])))
-    tmp.out <- rbind(tmp.out, df)
-    n.out   <- c(n.out, out.cellname[[i]])
-  }
-  n.i     <- order(n.out)
-  n.out   <- n.out[n.i]
-  tmp.out <- tmp.out[n.i,]
-  if (class(old.name)=="character"){
-    print(sum(old.name==n.out))
-  }
-  old.name <- n.out
-  out.s <- cbind(out.s, tmp.out[,2])
-}
-
-row.names(out.s) <- old.name
-colnames(out.s)  <- paste0("clu", clu.n)
-
-################################
-cat("re-naming cluster ....\n")
-################################
-dat <- out.s
-out.s <- dat[,1]
-new.c <- dat[,1]
-for (j in 2:ncol(dat)){
-  ## previous cluster number
-  clu.m <- max(new.c)
-  old.c  <- NULL
-  ## order of the cluster ID by the previous cluster ID (1:clu.m)
-  for (k in 1:clu.m){
-    the.i <- which(new.c==k)
-    n.u   <- unique(dat[the.i,j])
-    old.c <- c(old.c, n.u)
-  }
-  ## re-sign the cluster ID by the order
-  new.c <- rep(NA, nrow(dat))
-  i <- 0
-  for (o.c in old.c){
-    i <- i + 1
-    o.i <- which(dat[,j]==o.c)
-    new.c[o.i] <- i
-  }
-  ## merge into the table
-  out.s <- cbind(out.s, new.c)
-}
-
-row.names(out.s) <- row.names(dat)
-colnames(out.s)  <- colnames(dat)
-write.table(out.s, "data/clastering/MiceAB_150clustered.txt", quote=F, sep="\t")
-################################
-# summary table for the cluster results
-################################
-out.s <- read.delim('data/clastering/MiceAB_150clustered.txt')
-dat   <- as.matrix(out.s)
-##########
-nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
-c2n   <- list()
-for (i in 1:nlc){
-  j <- which(dat[,ncol(dat)] == i)
-  c2n[[i]] <- row.names(dat)[j]
-}
-
-out.c <- NULL
-out.n <- NULL
-for (j in 1:ncol(dat)){
-  out1 <- NULL
-  out2 <- NULL
-  for (i in 1:nlc){
-    n   <- c2n[[i]]
-    k   <- which(row.names(dat) %in% n)
-    clu <- unique(dat[k, j])
-    out1 <- c(out1, clu)
-    out2 <- c(out2, length(k))
-  }
-  out.c <- cbind(out.c, out1)
-  out.n <- cbind(out.n, out2)
-}
-
-colnames(out.c)  <- colnames(dat)
-row.names(out.c) <- paste0("c", 1:nrow(out.c))
-colnames(out.n)  <- colnames(dat)
-row.names(out.n) <- paste0("c", 1:nrow(out.n))
-
-write.table(out.c, "data/clastering/MiceAB_150cluID.txt", quote=F, sep="\t")
-write.table(out.n, "data/clastering/MiceAB_150cluNum.txt", quote=F, sep="\t")
-################################
-rm(list=setdiff(ls(), sel_var))
-```
-
-## new expression based on average of cells within class
-
-```{r}
-out.s <- read.delim('data/clastering/MiceAB_150clustered.txt')
-out.s <- as.matrix(out.s)
-##################
-mydat <- as.data.frame(t(mice_e15[,-c(13,14)]))
-myclu.s <- data.frame(out.s)
-############
-#myclu.s <- myclu.s[rownames(at2[grep('Branch A',at2$Integrated_05),]),]
-#########
-dat.i <- which(colnames(mydat) %in% row.names(myclu.s))
-mydat.s <- mydat[,dat.i]
-clun <- ncol(myclu.s) # 15 means "clu150" , ....
-clu.u <- unique(myclu.s[,clun])
-
-exClu<-c()
-for (gi in 1:nrow(mydat)) {
-  print(gi)
-  v1.i<-gi
-  v1.c <- NULL
-  v2.c <- NULL
-  for (j in 1:length(clu.u)){
-    c.i  <- which(myclu.s[,clun]==clu.u[j])
-    c.n  <- row.names(myclu.s)[c.i]
-    d.i  <- which(colnames(mydat.s) %in% c.n)
-    tmp1 <- as.numeric(mydat.s[v1.i, d.i])
-    v1.c <- c(v1.c, mean(tmp1))
-    }
-  exClu<-rbind(exClu,v1.c)
-}
-colnames(exClu) <- paste0(colnames(out.s)[ncol(out.s)],'_class_',clu.u)
-rownames(exClu)<-rownames(mydat.s)
-exClu <- data.frame(t(exClu),branch='b',Branch='AB')
-saveRDS(exClu,'data/rds/MiceAB_150exClu.rds')
-#######################
-rm(list=setdiff(ls(), sel_var))
-exClu<-readRDS('../data/rds/MiceAB_exClu.rds')
 ```
 
