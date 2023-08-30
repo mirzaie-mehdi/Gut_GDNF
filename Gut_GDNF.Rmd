@@ -216,11 +216,11 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   species <- str_to_lower(species)
   branch <- str_to_upper(branch)
   if(species=='human'){
-    #df <- human_sec_trim
-    df <- human_exClu
+    df <- human_sec_trim
+    #df <- human_exClu
   } else if (species=='mice'){
-    #df <- mice_e15
-    df <- mice_exClu
+    df <- mice_e15
+    #df <- mice_exClu
   }
   b <- paste0('Branch ', branch)
   if(branch!='AB'){
