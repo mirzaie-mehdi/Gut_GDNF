@@ -70,7 +70,7 @@ rm(list=setdiff(ls(), sel_var))
 library(scCorr)
 ump <- ump_mice
 ## cluster numbers
-clu.n  <- seq(10, 90, length.out = 9)
+clu.n  <- seq(100, 250, length.out = 16)
 ################################
 out.s <- NULL
 old.name <- NULL
