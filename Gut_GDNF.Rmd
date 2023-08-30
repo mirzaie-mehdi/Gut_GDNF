@@ -276,7 +276,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
       if (i>j & length(x)>2){
         gp <- ggplot(dfxy, aes(x = x, y = y)) +
           geom_point() +
-          ggtitle(paste(subDir,", Number of cells = ",length(x))) +
+          ggtitle(paste(subDir,", Number of clusters = ",length(x))) +
           #xlim(.01,max(x)) + ylim(.01,max(y)) +
           labs(x = gene1, y = gene2) +
           theme_light(base_line_size = 0) +
@@ -316,7 +316,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
     scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
                          high="#DC0000B2", low="#3C5488B2") +
     theme_test() +
-    ggtitle(paste0(subDir,", Number of Cells = ", nrow(df))) +
+    ggtitle(paste0(subDir,", Number of Clusters = ", nrow(df))) +
     theme(axis.title = element_blank(),
           axis.text = element_text( face = "bold",size = 14),
           legend.position = "bottom",
