@@ -22,12 +22,13 @@ GSE149524
 
 
 ## library
-```{r library}
+```{r library, message=FALSE,echo=FALSE}
 library(ggplot2)
 library(dplyr)
 library(reshape2)
 library(ggpubr)
 library(tidyverse)
+library(crayon) # text color in console
 ```
 
 ## Read data
@@ -36,601 +37,297 @@ The data sets
 ```{r read_data, echo=FALSE}
 mice_e15 <- readRDS("data/rds/normExp_MiceE15.rds")
 human_sec_trim <- readRDS("data/rds/normExp_HumanSecondTrim.rds")
-
+######################
+#human_first_trim <- readRDS("data/rds/human_first.rds")
+######################
+human_exClu <- readRDS('data/rds/HumanAB_90exClu.rds')
+mice_exClu <- readRDS('data/rds/MiceAB_90exClu.rds')
 ```
 
-## Mice
+## load UMAP data
 
 ```{r}
-miceA <- mice_e15[mice_e15$Branch=="Branch A",-c(13,14)] # There are 2127 cells.
-num_genes = ncol(miceA)
-gene_names <- colnames(miceA)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-        x <- miceA[,i]
-        y <- miceA[,j]
-        gene2 = gene_names[j] 
+library(anndata)
+z <- read_h5ad("~/Desktop/proj/Heikki/data/norm_humanSecondTrime.h5ad")
+at <- z$obs
+ump<-z$obsm$X_umap
+rownames(ump)<-rownames(at)
+ump_human<-data.frame(ump[rownames(human_sec_trim),])
+################
+## mice
+at <- read.csv("~/Desktop/proj/Heikki/SCgutAtlas/mice/GSE149524/E15/loomE15.csv")
+at$CellID <- str_match(at$CellID, "(.*:)(.*)")[,3]
+rownames(at)<-at$CellID
+ump_mice<-at[rownames(mice_e15),3:4]
+######## clean environment
+sel_var <- c('sel_var',"human_sec_trim","mice_e15","mycor",'ump_human','ump_mice')
+rm(list=setdiff(ls(), sel_var))
+```
+
+## scCorr package
+
+```{r}
+library(scCorr)
+ump <- ump_mice
+## cluster numbers
+clu.n  <- seq(10, 90, length.out = 9)
+################################
+out.s <- NULL
+old.name <- NULL
+for (c.n in clu.n){
+  cat("cluster number: ", c.n, "\n")
+  out           <- c_list(ump, c.n)
+  out.cellname  <- out[[2]]
+  tmp.out       <- NULL
+  n.out         <- NULL
+  for (i in 1:length(out.cellname)){
+    df <- data.frame(cell=out.cellname[[i]],
+                    clusterID=rep(i,length(out.cellname[[i]])))
+    tmp.out <- rbind(tmp.out, df)
+    n.out   <- c(n.out, out.cellname[[i]])
+  }
+  n.i     <- order(n.out)
+  n.out   <- n.out[n.i]
+  tmp.out <- tmp.out[n.i,]
+  if (class(old.name)=="character"){
+    print(sum(old.name==n.out))
+  }
+  old.name <- n.out
+  out.s <- cbind(out.s, tmp.out[,2])
+}
+
+row.names(out.s) <- old.name
+colnames(out.s)  <- paste0("clu", clu.n)
+
+################################
+cat("re-naming cluster ....\n")
+################################
+dat <- out.s
+out.s <- dat[,1]
+new.c <- dat[,1]
+for (j in 2:ncol(dat)){
+  ## previous cluster number
+  clu.m <- max(new.c)
+  old.c  <- NULL
+  ## order of the cluster ID by the previous cluster ID (1:clu.m)
+  for (k in 1:clu.m){
+    the.i <- which(new.c==k)
+    n.u   <- unique(dat[the.i,j])
+    old.c <- c(old.c, n.u)
+  }
+  ## re-sign the cluster ID by the order
+  new.c <- rep(NA, nrow(dat))
+  i <- 0
+  for (o.c in old.c){
+    i <- i + 1
+    o.i <- which(dat[,j]==o.c)
+    new.c[o.i] <- i
+  }
+  ## merge into the table
+  out.s <- cbind(out.s, new.c)
+}
+
+row.names(out.s) <- row.names(dat)
+colnames(out.s)  <- colnames(dat)
+write.table(out.s, "data/clastering/MiceAB_90clustered.txt", quote=F, sep="\t")
+################################
+# summary table for the cluster results
+################################
+out.s <- read.delim('data/clastering/MiceAB_90clustered.txt')
+dat   <- as.matrix(out.s)
+##########
+nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
+c2n   <- list()
+for (i in 1:nlc){
+  j <- which(dat[,ncol(dat)] == i)
+  c2n[[i]] <- row.names(dat)[j]
+}
+
+out.c <- NULL
+out.n <- NULL
+for (j in 1:ncol(dat)){
+  out1 <- NULL
+  out2 <- NULL
+  for (i in 1:nlc){
+    n   <- c2n[[i]]
+    k   <- which(row.names(dat) %in% n)
+    clu <- unique(dat[k, j])
+    out1 <- c(out1, clu)
+    out2 <- c(out2, length(k))
+  }
+  out.c <- cbind(out.c, out1)
+  out.n <- cbind(out.n, out2)
+}
+
+colnames(out.c)  <- colnames(dat)
+row.names(out.c) <- paste0("c", 1:nrow(out.c))
+colnames(out.n)  <- colnames(dat)
+row.names(out.n) <- paste0("c", 1:nrow(out.n))
+
+write.table(out.c, "data/clastering/MiceAB_90cluID.txt", quote=F, sep="\t")
+write.table(out.n, "data/clastering/MiceAB_90cluNum.txt", quote=F, sep="\t")
+################################
+rm(list=setdiff(ls(), sel_var))
+```
+
+## new expression based on average of cells within class
+
+```{r}
+out.s <- read.delim('data/clastering/MiceAB_90clustered.txt')
+out.s <- as.matrix(out.s)
+##################
+mydat <- as.data.frame(t(mice_e15[,-c(13,14)]))
+myclu.s <- data.frame(out.s)
+#######################
+dat.i <- which(colnames(mydat) %in% row.names(myclu.s))
+mydat.s <- mydat[,dat.i]
+clun <- ncol(myclu.s) # 15 means "clu150" , ....
+clu.u <- unique(myclu.s[,clun])
+
+exClu<-c()
+for (gi in 1:nrow(mydat)) {
+  print(gi)
+  v1.i<-gi
+  v1.c <- NULL
+  v2.c <- NULL
+  for (j in 1:length(clu.u)){
+    c.i  <- which(myclu.s[,clun]==clu.u[j])
+    c.n  <- row.names(myclu.s)[c.i]
+    d.i  <- which(colnames(mydat.s) %in% c.n)
+    tmp1 <- as.numeric(mydat.s[v1.i, d.i])
+    v1.c <- c(v1.c, mean(tmp1))
+    }
+  exClu<-rbind(exClu,v1.c)
+}
+colnames(exClu) <- paste0(colnames(out.s)[ncol(out.s)],'_class_',clu.u)
+rownames(exClu)<-rownames(mydat.s)
+exClu <- data.frame(t(exClu),branch='b',Branch='AB')
+saveRDS(exClu,'data/rds/MiceAB_90exClu.rds')
+#######################
+rm(list=setdiff(ls(), sel_var))
+exClu<-readRDS('../data/rds/MiceAB_exClu.rds')
+```
+
+## function for pairwise correlation
+## save scatter plot of pair genes
+
+```{r}
+mycor <- function(species='human',branch='AB',includeZeros=TRUE){
+  species <- str_to_lower(species)
+  branch <- str_to_upper(branch)
+  if(species=='human'){
+    #df <- human_sec_trim
+    df <- human_exClu
+  } else if (species=='mice'){
+    #df <- mice_e15
+    df <- mice_exClu
+  }
+  b <- paste0('Branch ', branch)
+  if(branch!='AB'){
+    df <- df[df$Branch==b, ]
+    if(species=='human'){
+      asub <- unique(df$branch)
+      sub <- c(factor('All'),asub)
+      sub <- paste0(1:length(sub),': ',sub,'\n')
+      cat(green("Note: there are sub branches = \n"),
+          green(bold(sub)))
+      sb <- readline(prompt = "Please enter sub branch number = ")
+      if(sb!=1){
+        sb<-asub[as.numeric(sb)]
+        df <- df[df$branch==sb, -c(13,14)]
+      } else if(sb==1){
+        sb <- b
+        df <- df[, -c(13,14)]
+        }
+    } else if(species=='mice'){
+      cat(green("Note: there are not information for sub branch in mice"),'\n')
+      sb <- b
+      df <- df[, -c(13,14)]
+      }
+    } else if(branch=='AB'){
+      sb <- b
+      df <- df[, -c(13,14)]
+      }
+  ######################  initializing
+  num_genes <- ncol(df)
+  gene_names <- colnames(df)
+  p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
+  cor_matrix <- p_value_matrix
+  ###############################
+  mainDir <- getwd()
+  subDir <- paste0(species,'_',sb)
+  pTOs <- file.path(mainDir, subDir)
+  if (!file.exists(pTOs)){
+    dir.create(pTOs)
+  }
+  #############################
+  for (i in 1:num_genes) {
+    gene1 = gene_names[i]
+    for (j in 1:num_genes) {
+      x <- df[,i]
+      y <- df[,j]
+      gene2 = gene_names[j]
+      if(!includeZeros){
         non_zero_indices <- which(x != 0 & y != 0)
-        x_non_zero <- x[non_zero_indices]
-        y_non_zero <- y[non_zero_indices]
-        df = data.frame(x=x_non_zero, y=y_non_zero)
-        if (i>j){
-          sc <- ggplot(df, aes(x = x, y = y)) +
-                geom_point() +
-            ggtitle(paste("Mice Branch A, Number of cells = ", length(x_non_zero), sep = "")) +
-                xlim(.01,max(x_non_zero)) + ylim(.01,max(y_non_zero)) +
-                labs(x = gene1,y = gene2) +
-                theme_light(base_line_size = 0) +
-                stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-                theme(axis.title = element_text(size = 20,face = 'bold'),
+        x <- x[non_zero_indices]
+        y <- y[non_zero_indices]
+      }
+      dfxy = data.frame(x=x, y=y)
+      if (i>j & length(x)>2){
+        gp <- ggplot(dfxy, aes(x = x, y = y)) +
+          geom_point() +
+          ggtitle(paste(subDir,", Number of clusters = ",length(x))) +
+          #xlim(.01,max(x)) + ylim(.01,max(y)) +
+          labs(x = gene1, y = gene2) +
+          theme_light(base_line_size = 0) +
+          stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
+          theme(axis.title = element_text(size = 20,face = 'bold'),
                 axis.text = element_text(size = 15,face = 'bold'))
-                # Save the plot
-                file_name <- paste("MiceA_",  gene1, "_vs_", gene2, ".png", sep = "")
-                ggsave(file_name, sc)
+        # Save the plot
+        file_name <- paste0(pTOs, '/',  gene1, "_vs_", gene2, ".png")
+        ggsave(file_name, gp)
         }
-        if (length(x_non_zero)>2){
-           c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-           p_value_matrix[i, j] <- c$p.value
-           cor_matrix[i, j] <- c$estimate
-        }
-#    p_value_matrix[i, j] <- cor.test(miceA[, i], miceA[, j],method = "spearman",exact = FALSE)$p.value
-#    cor_matrix[i, j] <- cor.test(miceA[, i], miceA[, j],method = "spearman",exact = FALSE)$estimate
-  }
+      if (length(x)>2){
+        c <- cor.test(x, y,method = "pearson")
+        p_value_matrix[i, j] <- c$p.value
+        cor_matrix[i, j] <- c$estimate
+      }
+    }
+    }
+  rownames(p_value_matrix) <- colnames(p_value_matrix) <- colnames(df)
+  rownames(cor_matrix) <- colnames(cor_matrix) <- colnames(df)
+  ################################
+  ############# heatmap
+  p_value <- p_value_matrix
+  p_value[upper.tri(p_value,diag =T)] <- NA
+  corr <- cor_matrix
+  corr[upper.tri(corr,diag =T)] <- NA
+  p_value_r <- na.omit(melt(p_value))
+  corr_r <- na.omit(melt(corr))
+  p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
+  colnames(p_val_corr) <- c("gene1","gene2","P_Value","Corr")
+  p_val_corr$L10p <- round(-log10(p_val_corr$P_Value),1)
+  gh <- ggplot(p_val_corr)+
+    geom_tile(aes(x=gene1,y=gene2, fill = Corr),
+              colour = "black", show.legend = TRUE) +
+    geom_text(aes(x=gene1,y=gene2,
+                  label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
+              parse = T,size=6,fontface="bold")+
+    scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
+                         high="#DC0000B2", low="#3C5488B2") +
+    theme_test() +
+    ggtitle(paste0(subDir,", Number of Clusters = ", nrow(df))) +
+    theme(axis.title = element_blank(),
+          axis.text = element_text( face = "bold",size = 14),
+          legend.position = "bottom",
+          legend.title = element_text( face = "bold",size = 12),
+          legend.text = element_text( face = "bold",size = 10),
+          plot.title = element_text(hjust = 0.5))
+  # Save the plot
+  file_name <- paste0(pTOs, '/',  subDir, ".pdf")
+  ggsave(file_name, gh,width = 9,height = 7)
+  write.csv(p_val_corr,file = paste0(pTOs, '/','cor_pvalue.csv'))
+  return(p_val_corr)
 }
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(miceA)
-
-```
-
-## Visualization_BranchA_mice
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-g = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Mice_Branch A, Number of Cells = 2127") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-      plot.title = element_text(hjust = 0.5))
-#        plot.title = element_text(hjust = 0.5, margin = margin(b = 5), face = "bold",size = 14 ))
-
-```
-
-## Human_Branch A
-
-```{r}
-humanA <- human_sec_trim[human_sec_trim$Branch=="Branch A",-c(13,14)] # There are 365 cells.
-num_genes = ncol(humanA)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-gene_names <- colnames(humanA)
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-    gene2 = gene_names[j] 
-    x <- humanA[,i]
-    y <- humanA[,j]
-    non_zero_indices <- which(x != 0 & y != 0)
-    x_non_zero <- x
-    y_non_zero <- y
-    df = data.frame(x=x_non_zero, y=y_non_zero)
-    if (i>j){
-      sc <- ggplot(df, aes(x = x, y = y)) +
-      geom_point() +
-      ggtitle(paste("Human Branch A, Number of cells = ", length(x_non_zero), sep = "")) +
-  #    xlim(.01,max(x_non_zero))+ylim(.01,max(y_non_zero)) +
-      labs(x = gene1,y = gene2) +
-      theme_light(base_line_size = 0) +
-      stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-      theme(axis.title = element_text(size = 20,face = 'bold'),
-         axis.text = element_text(size = 15,face = 'bold'))
-  
-    # Save the plot
-    file_name <- paste("HumanA_",  gene1, "_vs_", gene2, ".png", sep = "")
-    ggsave(file_name, sc)
-    }
-    if (length(x_non_zero)>2){
-       c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-       p_value_matrix[i, j] <- c$p.value
-       cor_matrix[i, j] <- c$estimate
-    }
-  }
-}
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(humanA)
-```
-
-## Visualization_BranchA_human
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-gh = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Human_Branch A, Number of Cells = 365") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-        plot.title = element_text(hjust = 0.5))
-
-```
-
-
-## Human_Branch B
-
-```{r}
-humanB <- human_sec_trim[human_sec_trim$Branch=="Branch B",-c(13,14)] # There are 512 cells.
-num_genes = ncol(humanB)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-gene_names <- colnames(humanB)
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-    gene2 = gene_names[j] 
-    x <- humanB[,i]
-    y <- humanB[,j]
-    non_zero_indices <- which(x != 0 & y != 0)
-    x_non_zero <- x
-    y_non_zero <- y
-    df = data.frame(x=x_non_zero, y=y_non_zero)
-    if (i>j){
-      sc <- ggplot(df, aes(x = x, y = y)) +
-      geom_point() +
-      ggtitle(paste("Human Branch B, Number of cells = ", length(x_non_zero), sep = "")) +
-  #    xlim(.01,max(x_non_zero))+ylim(.01,max(y_non_zero)) +
-      labs(x = gene1,y = gene2) +
-      theme_light(base_line_size = 0) +
-      stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-      theme(axis.title = element_text(size = 20,face = 'bold'),
-         axis.text = element_text(size = 15,face = 'bold'))
-  
-    # Save the plot
-    file_name <- paste("humanB_",  gene1, "_vs_", gene2, ".png", sep = "")
-    ggsave(file_name, sc)
-    }
-    if (length(x_non_zero)>2){
-       c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-       p_value_matrix[i, j] <- c$p.value
-       cor_matrix[i, j] <- c$estimate
-    }
-  }
-}
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(humanB)
-```
-
-## Visualization_BranchB_human
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-gh = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Human_Branch B, Number of Cells = 512") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-        plot.title = element_text(hjust = 0.5))
-
-```
-
-
-
-## Human A1_Second
-
-```{r}
-humanA1 <- human_sec_trim[human_sec_trim$branch=="Branch A1 (iMN)",-c(13,14)] # There are 229 cells.
-num_genes = ncol(humanA1)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-gene_names <- colnames(humanA1)
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-    gene2 = gene_names[j] 
-    x <- humanA1[,i]
-    y <- humanA1[,j]
-    non_zero_indices <- which(x != 0 & y != 0)
-    x_non_zero <- x[non_zero_indices]
-    y_non_zero <- y[non_zero_indices]
-    df = data.frame(x=x_non_zero, y=y_non_zero)
-    if (i>j){
-      sc <- ggplot(df, aes(x = x, y = y)) +
-      geom_point() +
-      ggtitle(paste("Human Branch A1_secondT, Number of cells = ", length(x_non_zero), sep = "")) +
-      xlim(.01,max(x_non_zero))+ylim(.01,max(y_non_zero)) +
-      labs(x = gene1,y = gene2) +
-      theme_light(base_line_size = 0) +
-      stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-      theme(axis.title = element_text(size = 20,face = 'bold'),
-         axis.text = element_text(size = 15,face = 'bold'))
-  
-    # Save the plot
-    file_name <- paste("humanA1_",  gene1, "_vs_", gene2, ".png", sep = "")
-    ggsave(file_name, sc)
-    }
-    if (length(x_non_zero)>2){
-       c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-       p_value_matrix[i, j] <- c$p.value
-       cor_matrix[i, j] <- c$estimate
-    }
-  }
-}
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(humanA1)
-```
-
-## Visualization_BranchA1_human_secondT
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-gh = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Human_Branch A1_Second, Number of Cells = 229") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-        plot.title = element_text(hjust = 0.5))
-
-```
-
-## First_Trimm_Human
-
-```{r}
-first_trim <- readRDS("data/rds/human_first.rds")
-human_1t_A <- first_trim[first_trim$branch=="Branch A1 (iMN)",-c(13,14)] # There are 1513 cells.
-num_genes = ncol(human_1t_A)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-gene_names <- colnames(human_1t_A)
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-    gene2 = gene_names[j] 
-    x <- human_1t_A[,i]
-    y <- human_1t_A[,j]
-    non_zero_indices <- which(x != 0 & y != 0)
-    x_non_zero <- x[non_zero_indices]
-    y_non_zero <- y[non_zero_indices]
-    df = data.frame(x=x_non_zero, y=y_non_zero)
-    if (i>j){
-      sc <- ggplot(df, aes(x = x, y = y)) +
-      geom_point() +
-      ggtitle(paste("Human Branch A1_first, Number of cells = ", length(x_non_zero), sep = "")) +
-      xlim(.01,max(x_non_zero))+ylim(.01,max(y_non_zero)) +
-      labs(x = gene1,y = gene2) +
-      theme_light(base_line_size = 0) +
-      stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-      theme(axis.title = element_text(size = 20,face = 'bold'),
-         axis.text = element_text(size = 15,face = 'bold'))
-  
-    # Save the plot
-    file_name <- paste("human_1t_A_",  gene1, "_vs_", gene2, ".png", sep = "")
-    ggsave(file_name, sc)
-    }
-    if (length(x_non_zero)>2){
-       c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-       p_value_matrix[i, j] <- c$p.value
-       cor_matrix[i, j] <- c$estimate
-    }
-  }
-}
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(human_1t_A)
-
-```
-
-## Visualization_FirstTrim_BranchA_human
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-gh = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Human_First_Trim_Branch A1, Number of Cells = 1513") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-        plot.title = element_text(hjust = 0.5))
-
-```
-
-## Second_Trimm_Human_A4
-
-```{r}
-second_trim <- readRDS("data/rds/normExp_HumanSecondTrim.rds")
-human_2t_A4 <- second_trim[second_trim$branch=="Branch A4 (IN)",-c(13,14)] # There are 136 cells.
-num_genes = ncol(human_2t_A4)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-gene_names <- colnames(human_2t_A4)
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-    gene2 = gene_names[j] 
-    x <- human_2t_A4[,i]
-    y <- human_2t_A4[,j]
-    non_zero_indices <- which(x != 0 & y != 0)
-    x_non_zero <- x[non_zero_indices]
-    y_non_zero <- y[non_zero_indices]
-    df = data.frame(x=x_non_zero, y=y_non_zero)
-    if (i>j){
-      sc <- ggplot(df, aes(x = x, y = y)) +
-      geom_point() +
-      ggtitle(paste("Human Branch A1_first, Number of cells = ", length(x_non_zero), sep = "")) +
-      xlim(.01,max(x_non_zero))+ylim(.01,max(y_non_zero)) +
-      labs(x = gene1,y = gene2) +
-      theme_light(base_line_size = 0) +
-      stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-      theme(axis.title = element_text(size = 20,face = 'bold'),
-         axis.text = element_text(size = 15,face = 'bold'))
-  
-    # Save the plot
-    file_name <- paste("human_2t_A4_",  gene1, "_vs_", gene2, ".png", sep = "")
-    ggsave(file_name, sc)
-    }
-    if (length(x_non_zero)>2){
-       c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-       p_value_matrix[i, j] <- c$p.value
-       cor_matrix[i, j] <- c$estimate
-    }
-  }
-}
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(human_2t_A4)
-
-```
-
-## Visualization_FirstTrim_BranchA_human
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-gh = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Human_second_trim_Branch A4, Number of Cells = 136") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-        plot.title = element_text(hjust = 0.5))
-
-```
-
-## Human_Branch A_B
-
-```{r}
-humanAB <- human_sec_trim[,-c(13,14)]# There are 877 cells.
-num_genes = ncol(humanAB)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-gene_names <- colnames(humanAB)
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-    gene2 = gene_names[j] 
-    x <- humanAB[,i]
-    y <- humanAB[,j]
-    non_zero_indices <- which(x != 0 & y != 0)
-    x_non_zero <- x
-    y_non_zero <- y
-    df = data.frame(x=x_non_zero, y=y_non_zero)
-    if (i>j){
-      sc <- ggplot(df, aes(x = x, y = y)) +
-      geom_point() +
-      ggtitle(paste("Human Branch A-B, Number of cells = ", length(x_non_zero), sep = "")) +
-#      xlim(.01,max(x_non_zero))+ylim(.01,max(y_non_zero)) +
-      labs(x = gene1,y = gene2) +
-      theme_light(base_line_size = 0) +
-      stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-      theme(axis.title = element_text(size = 20,face = 'bold'),
-         axis.text = element_text(size = 15,face = 'bold'))
-  
-    # Save the plot
-    file_name <- paste("humanAB_",  gene1, "_vs_", gene2, ".png", sep = "")
-    ggsave(file_name, sc)
-    }
-    if (length(x_non_zero)>2){
-       c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-       p_value_matrix[i, j] <- c$p.value
-       cor_matrix[i, j] <- c$estimate
-    }
-  }
-}
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(humanAB)
-```
-
-## Visualization_BranchB_human
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-gh = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Human_Branch A-B, Number of Cells = 877") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-        plot.title = element_text(hjust = 0.5))
-
-```
-
-## Mice_A-B
-
-```{r}
-miceAB <- mice_e15[,-c(13,14)] # There are 2476 cells.
-num_genes = ncol(miceAB)
-gene_names <- colnames(miceAB)
-p_value_matrix <- matrix(NA, nrow = num_genes, ncol = num_genes)
-cor_matrix = p_value_matrix
-for (i in 1:num_genes) {
-  gene1 = gene_names[i] 
-  for (j in 1:num_genes) {
-        x <- miceAB[,i]
-        y <- miceAB[,j]
-        gene2 = gene_names[j] 
-        non_zero_indices <- which(x != 0 & y != 0)
-        x_non_zero <- x
-        y_non_zero <- y
-        df = data.frame(x=x_non_zero, y=y_non_zero)
-        if (i>j){
-          sc <- ggplot(df, aes(x = x, y = y)) +
-                geom_point() +
-            ggtitle(paste("Mice Branch A, Number of cells = ", length(x_non_zero), sep = "")) +
- #               xlim(.01,max(x_non_zero)) + ylim(.01,max(y_non_zero)) +
-                labs(x = gene1,y = gene2) +
-                theme_light(base_line_size = 0) +
-                stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-                theme(axis.title = element_text(size = 20,face = 'bold'),
-                axis.text = element_text(size = 15,face = 'bold'))
-                # Save the plot
-                file_name <- paste("miceAB_",  gene1, "_vs_", gene2, ".png", sep = "")
-                ggsave(file_name, sc)
-        }
-        if (length(x_non_zero)>2){
-           c <- cor.test(x_non_zero, y_non_zero,method = "pearson")
-           p_value_matrix[i, j] <- c$p.value
-           cor_matrix[i, j] <- c$estimate
-        }
-#    p_value_matrix[i, j] <- cor.test(miceAB[, i], miceAB[, j],method = "spearman",exact = FALSE)$p.value
-#    cor_matrix[i, j] <- cor.test(miceAB[, i], miceAB[, j],method = "spearman",exact = FALSE)$estimate
-  }
-}
-rownames(p_value_matrix) = rownames(cor_matrix) = colnames(p_value_matrix) = colnames(cor_matrix) = colnames(miceAB)
-
-```
-
-## Visualization_BranchAB_mice
-
-```{r}
-p_value <- p_value_matrix
-p_value[upper.tri(p_value,diag =T)] <- NA
-corr <- cor_matrix
-corr[upper.tri(corr,diag =T)] <- NA
-p_value_r = na.omit(melt(p_value))
-corr_r = na.omit(melt(corr))
-p_val_corr <- merge(p_value_r,corr_r,by = c("Var1","Var2"))
-colnames(p_val_corr) = c("gene1","gene2","P-Value","Corr")
-p_val_corr$L10p = round(-log10(p_val_corr$`P-Value`),1)
-g = ggplot(p_val_corr)+
-  geom_tile(aes(x=gene1,y=gene2, fill = Corr),colour = "black", show.legend = TRUE) +
-  geom_text(aes(x=gene1,y=gene2, label=ifelse(!is.na(L10p),paste0("10^-",L10p),NA)),
-            parse = T,size=6,fontface="bold")+
-  scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
-                       high="#DC0000B2", low="#3C5488B2") +
- theme_test() + 
-  ggtitle("Mice_Branch AB, Number of Cells = 2476") +
-  theme(axis.title = element_blank(),
-        axis.text = element_text( face = "bold",size = 14),
-        legend.position = "bottom",
-        legend.title = element_text( face = "bold",size = 12),
-        legend.text = element_text( face = "bold",size = 10),
-      plot.title = element_text(hjust = 0.5))
-#        plot.title = element_text(hjust = 0.5, margin = margin(b = 5), face = "bold",size = 14 ))
-
 ```
 
