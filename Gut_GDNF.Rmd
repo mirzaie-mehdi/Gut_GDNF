@@ -133,39 +133,36 @@ write.table(out.s, "data/clastering/HumanA_50clustered.txt", quote=F, sep="\t")
 ################################
 # summary table for the cluster results
 ################################
-out.s <- read.delim('data/clastering/HumanA_50clustered.txt')
-dat   <- as.matrix(out.s)
-##########
-nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
-c2n   <- list()
-for (i in 1:nlc){
-  j <- which(dat[,ncol(dat)] == i)
-  c2n[[i]] <- row.names(dat)[j]
-}
+# out.s <- read.delim('data/clastering/HumanA_50clustered.txt')
+# dat   <- as.matrix(out.s)
+###########
+# nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
+# c2n   <- list()
+# for (i in 1:nlc){
+#   j <- which(dat[,ncol(dat)] == i)
+#   c2n[[i]] <- row.names(dat)[j]
+# }
 
-out.c <- NULL
-out.n <- NULL
-for (j in 1:ncol(dat)){
-  out1 <- NULL
-  out2 <- NULL
-  for (i in 1:nlc){
-    n   <- c2n[[i]]
-    k   <- which(row.names(dat) %in% n)
-    clu <- unique(dat[k, j])
-    out1 <- c(out1, clu)
-    out2 <- c(out2, length(k))
-  }
-  out.c <- cbind(out.c, out1)
-  out.n <- cbind(out.n, out2)
-}
+# #out.c <- NULL
+# out.n <- NULL
+# for (j in 1:ncol(dat)){
+#   #out1 <- NULL
+#   out2 <- NULL
+#   for (i in 1:nlc){
+#     n   <- c2n[[i]]
+#     k   <- which(row.names(dat) %in% n)
+#     #clu <- unique(dat[k, j])
+#     #out1 <- c(out1, clu)
+#     out2 <- c(out2, length(k))
+#   }
+#   #out.c <- cbind(out.c, out1)
+#   out.n <- cbind(out.n, out2)
+# }
 
-colnames(out.c)  <- colnames(dat)
-row.names(out.c) <- paste0("c", 1:nrow(out.c))
-colnames(out.n)  <- colnames(dat)
-row.names(out.n) <- paste0("c", 1:nrow(out.n))
+# colnames(out.n)  <- colnames(dat)
+# row.names(out.n) <- paste0("c", 1:nrow(out.n))
 
-write.table(out.c, "data/clastering/MiceAB_90cluID.txt", quote=F, sep="\t")
-write.table(out.n, "data/clastering/MiceAB_90cluNum.txt", quote=F, sep="\t")
+# write.table(out.n, "data/clastering/MiceAB_90cluNum.txt", quote=F, sep="\t")
 ################################
 rm(list=setdiff(ls(), sel_var))
 ```
