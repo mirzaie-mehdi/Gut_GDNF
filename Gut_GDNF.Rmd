@@ -36,6 +36,7 @@ library(crayon) # text color in console
 The data sets 
 ```{r read_data, echo=FALSE}
 #jghj
+#asdfafda
 mice_e15 <- readRDS("data/rds/normExp_MiceE15.rds")
 human_sec_trim <- readRDS("data/rds/normExp_HumanSecondTrim.rds")
 ######################
