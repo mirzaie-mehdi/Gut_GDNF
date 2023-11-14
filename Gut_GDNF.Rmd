@@ -35,6 +35,7 @@ library(crayon) # text color in console
 
 The data sets 
 ```{r read_data, echo=FALSE}
+#jghj
 mice_e15 <- readRDS("data/rds/normExp_MiceE15.rds")
 human_sec_trim <- readRDS("data/rds/normExp_HumanSecondTrim.rds")
 ######################
@@ -52,7 +53,7 @@ z <- read_h5ad("~/Desktop/proj/Heikki/data/norm_humanSecondTrime.h5ad")
 at <- z$obs
 ump<-z$obsm$X_umap
 rownames(ump)<-rownames(at)
-ump_human<-data.frame(ump[rownames(human_sec_trim),])
+ump_human<-data.frame(ump[rownames(human_sec_trim[human_sec_trim$Branch%in%'Branch A',]),])
 ################
 ## mice
 at <- read.csv("~/Desktop/proj/Heikki/SCgutAtlas/mice/GSE149524/E15/loomE15.csv")
@@ -68,9 +69,9 @@ rm(list=setdiff(ls(), sel_var))
 
 ```{r}
 library(scCorr)
-ump <- ump_mice
+ump <- ump_human
 ## cluster numbers
-clu.n  <- seq(10, 90, length.out = 9)
+clu.n  <- seq(10, 40, length.out = 4)
 ################################
 out.s <- NULL
 old.name <- NULL
@@ -129,43 +130,40 @@ for (j in 2:ncol(dat)){
 
 row.names(out.s) <- row.names(dat)
 colnames(out.s)  <- colnames(dat)
-write.table(out.s, "data/clastering/MiceAB_90clustered.txt", quote=F, sep="\t")
+write.table(out.s, "data/clastering/HumanA_50clustered.txt", quote=F, sep="\t")
 ################################
 # summary table for the cluster results
 ################################
-out.s <- read.delim('data/clastering/MiceAB_90clustered.txt')
-dat   <- as.matrix(out.s)
-##########
-nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
-c2n   <- list()
-for (i in 1:nlc){
-  j <- which(dat[,ncol(dat)] == i)
-  c2n[[i]] <- row.names(dat)[j]
-}
+# out.s <- read.delim('data/clastering/HumanA_50clustered.txt')
+# dat   <- as.matrix(out.s)
+###########
+# nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
+# c2n   <- list()
+# for (i in 1:nlc){
+#   j <- which(dat[,ncol(dat)] == i)
+#   c2n[[i]] <- row.names(dat)[j]
+# }
 
-out.c <- NULL
-out.n <- NULL
-for (j in 1:ncol(dat)){
-  out1 <- NULL
-  out2 <- NULL
-  for (i in 1:nlc){
-    n   <- c2n[[i]]
-    k   <- which(row.names(dat) %in% n)
-    clu <- unique(dat[k, j])
-    out1 <- c(out1, clu)
-    out2 <- c(out2, length(k))
-  }
-  out.c <- cbind(out.c, out1)
-  out.n <- cbind(out.n, out2)
-}
+# #out.c <- NULL
+# out.n <- NULL
+# for (j in 1:ncol(dat)){
+#   #out1 <- NULL
+#   out2 <- NULL
+#   for (i in 1:nlc){
+#     n   <- c2n[[i]]
+#     k   <- which(row.names(dat) %in% n)
+#     #clu <- unique(dat[k, j])
+#     #out1 <- c(out1, clu)
+#     out2 <- c(out2, length(k))
+#   }
+#   #out.c <- cbind(out.c, out1)
+#   out.n <- cbind(out.n, out2)
+# }
 
-colnames(out.c)  <- colnames(dat)
-row.names(out.c) <- paste0("c", 1:nrow(out.c))
-colnames(out.n)  <- colnames(dat)
-row.names(out.n) <- paste0("c", 1:nrow(out.n))
+# colnames(out.n)  <- colnames(dat)
+# row.names(out.n) <- paste0("c", 1:nrow(out.n))
 
-write.table(out.c, "data/clastering/MiceAB_90cluID.txt", quote=F, sep="\t")
-write.table(out.n, "data/clastering/MiceAB_90cluNum.txt", quote=F, sep="\t")
+# write.table(out.n, "data/clastering/MiceAB_90cluNum.txt", quote=F, sep="\t")
 ################################
 rm(list=setdiff(ls(), sel_var))
 ```
@@ -173,10 +171,10 @@ rm(list=setdiff(ls(), sel_var))
 ## new expression based on average of cells within class
 
 ```{r}
-out.s <- read.delim('data/clastering/MiceAB_90clustered.txt')
+out.s <- read.delim('data/clastering/HumanA_50clustered.txt')
 out.s <- as.matrix(out.s)
 ##################
-mydat <- as.data.frame(t(mice_e15[,-c(13,14)]))
+mydat <- as.data.frame(t(human_sec_trim[,-c(13,14)]))
 myclu.s <- data.frame(out.s)
 #######################
 dat.i <- which(colnames(mydat) %in% row.names(myclu.s))
@@ -217,10 +215,10 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   branch <- str_to_upper(branch)
   if(species=='human'){
     #df <- human_sec_trim
-    df <- human_exClu
+    df <- exClu
   } else if (species=='mice'){
-    #df <- mice_e15
-    df <- mice_exClu
+    df <- mice_e15
+    #df <- mice_exClu
   }
   b <- paste0('Branch ', branch)
   if(branch!='AB'){
