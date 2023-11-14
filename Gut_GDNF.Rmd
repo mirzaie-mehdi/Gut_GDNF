@@ -216,10 +216,10 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   branch <- str_to_upper(branch)
   if(species=='human'){
     #df <- human_sec_trim
-    df <- exClu
+    df <- human_exClu
   } else if (species=='mice'){
-    df <- mice_e15
-    #df <- mice_exClu
+    #df <- mice_e15
+    df <- mice_exClu
   }
   b <- paste0('Branch ', branch)
   if(branch!='AB'){
@@ -274,17 +274,18 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
       dfxy = data.frame(x=x, y=y)
       if (i>j & length(x)>2){
         gp <- ggplot(dfxy, aes(x = x, y = y)) +
-          geom_point() +
-          ggtitle(paste(subDir,", Number of clusters = ",length(x))) +
+          geom_point(size=5,alpha=.8) +
+          #ggtitle(paste(subDir,", Number of clusters = ",length(x))) +
           #xlim(.01,max(x)) + ylim(.01,max(y)) +
           labs(x = gene1, y = gene2) +
           theme_light(base_line_size = 0) +
-          stat_cor(method = "pearson", size=5, color = "red", geom = "label") +
-          theme(axis.title = element_text(size = 20,face = 'bold'),
-                axis.text = element_text(size = 15,face = 'bold'))
+          stat_cor(method = "pearson", size=10,
+                   color = "red",geom = 'label',label.size = NA) +
+          theme(axis.title = element_text(size = 35,face = 'bold',vjust = 1),
+                axis.text = element_text(size = 25,face = 'bold'))
         # Save the plot
         file_name <- paste0(pTOs, '/',  gene1, "_vs_", gene2, ".png")
-        ggsave(file_name, gp)
+        ggsave(file_name, gp,dpi = 600,width = 8,height = 8)
         }
       if (length(x)>2){
         c <- cor.test(x, y,method = "pearson")
@@ -315,7 +316,7 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
     scale_fill_gradient2(mid="white",limits=c(-1,1),na.value = 'gray80',
                          high="#DC0000B2", low="#3C5488B2") +
     theme_test() +
-    ggtitle(paste0(subDir,", Number of Clusters = ", nrow(df))) +
+    #ggtitle(paste0(subDir,", Number of Clusters = ", nrow(df))) +
     theme(axis.title = element_blank(),
           axis.text = element_text( face = "bold",size = 14),
           legend.position = "bottom",
