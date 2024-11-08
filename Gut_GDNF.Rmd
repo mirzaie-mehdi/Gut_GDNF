@@ -8,7 +8,7 @@ date: "2023-08-23"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Read Data
+## Data
 
 In this project we use two single cell RNA-seq data sets which can be downloaded from
 For human:
@@ -131,11 +131,12 @@ for (j in 2:ncol(dat)){
 
 row.names(out.s) <- row.names(dat)
 colnames(out.s)  <- colnames(dat)
-write.table(out.s, "data/clastering/HumanA_50clustered.txt", quote=F, sep="\t")
+write.table(out.s, "data/clustering/HumanA_50clustered.txt",
+            quote=F, sep="\t")
 ################################
 # summary table for the cluster results
 ################################
-# out.s <- read.delim('data/clastering/HumanA_50clustered.txt')
+# out.s <- read.delim('data/clustering/HumanA_50clustered.txt')
 # dat   <- as.matrix(out.s)
 ###########
 # nlc <- clu.n[length(clu.n)]  ## Number of class within Last Cluster
@@ -164,15 +165,15 @@ write.table(out.s, "data/clastering/HumanA_50clustered.txt", quote=F, sep="\t")
 # colnames(out.n)  <- colnames(dat)
 # row.names(out.n) <- paste0("c", 1:nrow(out.n))
 
-# write.table(out.n, "data/clastering/MiceAB_90cluNum.txt", quote=F, sep="\t")
+# write.table(out.n, "data/clustering/MiceAB_90cluNum.txt", quote=F, sep="\t")
 ################################
 rm(list=setdiff(ls(), sel_var))
 ```
 
-## new expression based on average of cells within class
-
+## new expression
+new expression based on average of cells within class
 ```{r}
-out.s <- read.delim('data/clastering/HumanA_50clustered.txt')
+out.s <- read.delim('data/clustering/HumanAB_90clustered.txt')
 out.s <- as.matrix(out.s)
 ##################
 mydat <- as.data.frame(t(human_sec_trim[,-c(13,14)]))
@@ -201,14 +202,11 @@ for (gi in 1:nrow(mydat)) {
 colnames(exClu) <- paste0(colnames(out.s)[ncol(out.s)],'_class_',clu.u)
 rownames(exClu)<-rownames(mydat.s)
 exClu <- data.frame(t(exClu),branch='b',Branch='AB')
-saveRDS(exClu,'data/rds/MiceAB_90exClu.rds')
-#######################
-rm(list=setdiff(ls(), sel_var))
-exClu<-readRDS('../data/rds/MiceAB_exClu.rds')
+#saveRDS(exClu,'data/rds/HumanAB_90exClu.rds')
 ```
 
-## function for pairwise correlation
-## save scatter plot of pair genes
+## pairwise correlation 
+function for pairwise correlation and save scatter plot of pair genes
 
 ```{r}
 mycor <- function(species='human',branch='AB',includeZeros=TRUE){
@@ -329,5 +327,18 @@ mycor <- function(species='human',branch='AB',includeZeros=TRUE){
   write.csv(p_val_corr,file = paste0(pTOs, '/','cor_pvalue.csv'))
   return(p_val_corr)
 }
+```
+
+# run mycor
+
+```{r}
+rm(list=setdiff(ls(), 'mycor'))
+human_exClu <- readRDS('data/rds/HumanAB_90exClu.rds')
+mice_exClu <- readRDS('data/rds/MiceAB_90exClu.rds')
+
+out <- mycor(species='human',branch='AB',includeZeros=TRUE)
+# output files will write in the following directory:
+#  ./species_Beanch branch
+# /home/peymanc/Desktop/proj/Gut_GDNF/human_Branch AB
 ```
 
